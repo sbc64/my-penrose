@@ -4,43 +4,59 @@
 extern crate penrose;
 
 use penrose::{
+    client::Client,
+    hooks::Hook,
     bindings::MouseEvent,
-    contrib::extensions::Scratchpad,
+    contrib::{
+        extensions::Scratchpad,
+        hooks::{DefaultWorkspace, LayoutSymbolAsRootName},
+    },
     draw::{dwm_bar, TextStyle, XCBDraw},
     helpers::{index_selectors, spawn, spawn_for_output},
     layout::{bottom_stack, monocle, side_stack, Layout, LayoutConf},
     Backward, Config, Forward, Less, More, Result, Selector, WindowManager, XcbConnection,
 };
 use simplelog::{LevelFilter, SimpleLogger};
-use std::env;
+//use std::env; // used for getting the HOME env var
 
-const HEIGHT: usize = 18;
-const PROFONT: &str = "hack";
-
+const HEIGHT: usize = 20;
+const FONT: &str = "hack";
 const BLACK: u32 = 0x282828ff;
 const GREY: u32 = 0x3c3836ff;
 const WHITE: u32 = 0xebdbb2ff;
 const BLUE: u32 = 0x458588ff;
 
+struct MyClientHook {}
+impl Hook for MyClientHook {
+    fn new_client(&mut self, wm: &mut WindowManager, c: &mut Client) {
+        wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()));
+        wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()));
+        if c.wm_name() == "calibre" {
+            c.set_workspace(4)
+        }
+    }
+}
+
 fn main() -> Result<()> {
     // -- logging --
     SimpleLogger::init(LevelFilter::Info, simplelog::Config::default())?;
-
     let mut config = Config::default();
 
     // -- top level config constants --
-    config.workspaces = vec!["1", "2", "3", "4", "5", "6", "7", "8", "9"];
-    config.floating_classes = &["rofi", "dmenu", "dunst", "polybar", "pinentry-gtk-2", "pinentry"];
+    config.workspaces = vec!["term", "dev", "3", "4", "5", "6", "7", "8", "messaging"];
+    config.floating_classes = &["dmenu", "dunst", "pinentry-gtk-2", "pinentry"];
 
+    config.focused_border = BLUE;
+    config.unfocused_border = BLACK;
     // -- hooks --
-    let sp = Scratchpad::new("st", 0.8, 0.8);
+    let sp = Scratchpad::new("alacritty", 0.8, 0.8);
     sp.register(&mut config);
 
     config.hooks.push(Box::new(dwm_bar(
         Box::new(XCBDraw::new()?),
         HEIGHT,
         &TextStyle {
-            font: PROFONT.to_string(),
+            font: FONT.to_string(),
             point_size: 11,
             fg: WHITE.into(),
             bg: Some(BLACK.into()),
@@ -58,32 +74,28 @@ fn main() -> Result<()> {
         follow_focus: true,
         allow_wrapping: true,
     };
+    let tiled_layout = LayoutConf {
+        floating: false,
+        gapless: true,
+        follow_focus: false,
+        allow_wrapping: true,
+    };
     let n_main = 1;
     let ratio = 0.6;
     config.layouts = vec![
-        Layout::new("[side]", LayoutConf::default(), side_stack, n_main, ratio),
+        Layout::new("[side]", tiled_layout, side_stack, n_main, ratio),
         Layout::new("[botm]", LayoutConf::default(), bottom_stack, n_main, ratio),
         Layout::new("[mono]", follow_focus_conf, monocle, n_main, ratio),
+        Layout::floating("[----]"),
     ];
-
-    // -- bindings --
-    let home = env::var("HOME").unwrap();
-    let script = format!("{}/bin/scripts/power-menu.sh", home);
-    let power_menu = Box::new(move |wm: &mut WindowManager| {
-        if let Ok(o) = spawn_for_output(&script) {
-            if o.as_str() == "restart-wm\n" {
-                wm.exit();
-            }
-        }
-    });
 
     let key_bindings = gen_keybindings! {
         // Program launch
         "M-p" => run_external!("dmenu_run");
         "M-S-p" => run_external!("passmenu");
         "M-Return" => run_external!("alacritty");
-        "M-A-l" => run_external!("i3lock-color -c 000000");
-        "M-S-p" => run_external!("vscode");
+        "M-S-l" => run_external!("i3lock-color -c 000000");
+        "M-S-Return" => run_external!("vscode");
 
         // actions
         "M-A-d" => run_internal!(detect_screens);
@@ -116,7 +128,7 @@ fn main() -> Result<()> {
         "M-A-Right" => run_internal!(update_main_ratio, More);
         "M-A-Left" => run_internal!(update_main_ratio, Less);
         "M-A-C-Escape" => run_internal!(exit);
-        "M-A-Escape" => power_menu;
+        //"M-A-Escape" => power_menu;
 
         refmap [ config.ws_range() ] in {
             "M-{}" => focus_workspace [ index_selectors(config.workspaces.len()) ];
@@ -129,11 +141,16 @@ fn main() -> Result<()> {
         Press Left + [Meta] => |wm: &mut WindowManager, _: &MouseEvent| wm.cycle_workspace(Backward)
     };
 
+    config.hooks.push(Box::new(MyClientHook {}));
+    config.hooks.push(DefaultWorkspace::new(
+        "1",
+        "[mono]",
+        vec!["alacritty"],
+    ));
+
     // -- init & run --
     let conn = XcbConnection::new()?;
     let mut wm = WindowManager::init(config, &conn);
-
-    spawn(format!("{}/bin/scripts/penrose-startup.sh", home));
     wm.grab_keys_and_run(key_bindings, mouse_bindings);
 
     Ok(())

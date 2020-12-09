@@ -19,6 +19,14 @@ pkgs.rustPlatform.buildRustPackage rec {
     xorg.libXrender.dev
     xorg.xmodmap
   ];
+
+  buildPhase = ''
+    cargo build
+  '';
+  installPhase = ''
+    mkdir -p $out
+    cp -r target/debug $out/bin
+  '';
   buildInputs = nativeBuildInputs;
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeBuildInputs;
   PKG_CONFIG_PATH= pkgPath;
