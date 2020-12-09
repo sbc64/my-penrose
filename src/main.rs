@@ -31,8 +31,11 @@ impl Hook for MyClientHook {
     fn new_client(&mut self, wm: &mut WindowManager, c: &mut Client) {
         wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()));
         wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()));
-        if c.wm_name() == "calibre" {
-            c.set_workspace(4)
+        match c.wm_name().as_ref() {
+            "Roam Research" => c.set_workspace(6),
+            "calibre" => c.set_workspace(6),
+            "Firefox Developer Edition" => c.set_workspace(2),
+            _ => println!("something else!")
         }
     }
 }
@@ -43,7 +46,7 @@ fn main() -> Result<()> {
     let mut config = Config::default();
 
     // -- top level config constants --
-    config.workspaces = vec!["term", "dev", "3", "4", "5", "6", "7", "8", "messaging"];
+    config.workspaces = vec!["1", "2", "3", "4", "5", "6", "7", "8", "messaging"];
     config.floating_classes = &["dmenu", "dunst", "pinentry-gtk-2", "pinentry"];
 
     config.focused_border = BLUE;
