@@ -1,7 +1,4 @@
 #![deny(clippy::all)]
-/**
- * My personal penrose config (build from the head of develop)
- */
 
 #[macro_use]
 extern crate penrose;
@@ -18,7 +15,7 @@ use simplelog::{LevelFilter, SimpleLogger};
 use std::env;
 
 const HEIGHT: usize = 18;
-const PROFONT: &str = "ProFont For Powerline";
+const PROFONT: &str = "hack";
 
 const BLACK: u32 = 0x282828ff;
 const GREY: u32 = 0x3c3836ff;
@@ -33,7 +30,7 @@ fn main() -> Result<()> {
 
     // -- top level config constants --
     config.workspaces = vec!["1", "2", "3", "4", "5", "6", "7", "8", "9"];
-    config.floating_classes = &["rofi", "dmenu", "dunst", "polybar", "pinentry-gtk-2"];
+    config.floating_classes = &["rofi", "dmenu", "dunst", "polybar", "pinentry-gtk-2", "pinentry"];
 
     // -- hooks --
     let sp = Scratchpad::new("st", 0.8, 0.8);
@@ -82,14 +79,13 @@ fn main() -> Result<()> {
 
     let key_bindings = gen_keybindings! {
         // Program launch
-        "M-semicolon" => run_external!("rofi-apps");
-        "M-Return" => run_external!("st");
+        "M-p" => run_external!("dmenu_run");
+        "M-S-p" => run_external!("passmenu");
+        "M-Return" => run_external!("alacritty");
+        "M-A-l" => run_external!("i3lock-color -c 000000");
+        "M-S-p" => run_external!("vscode");
 
         // actions
-        "M-A-s" => run_external!("screenshot");
-        "M-A-k" => run_external!("toggle-kb-for-tada");
-        "M-A-l" => run_external!("lock-screen");
-        "M-A-m" => run_external!("xrandr --output HDMI-1 --auto --right-of eDP-1 ");
         "M-A-d" => run_internal!(detect_screens);
         "M-slash" => sp.toggle();
 
@@ -101,7 +97,8 @@ fn main() -> Result<()> {
         "M-C-bracketleft" => run_internal!(client_to_screen, &Selector::Index(0));
         "M-C-bracketright" => run_internal!(client_to_screen, &Selector::Index(1));
         "M-S-f" => run_internal!(toggle_client_fullscreen, &Selector::Focused);
-        "M-S-q" => run_internal!(kill_client);
+        "M-S-c" => run_internal!(kill_client);
+
         // workspace management
         "M-Tab" => run_internal!(toggle_workspace);
         "M-A-period" => run_internal!(cycle_workspace, Forward);
