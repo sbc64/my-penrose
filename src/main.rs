@@ -32,9 +32,14 @@ impl Hook for MyClientHook {
         wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()));
         wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()));
         match c.wm_name().as_ref() {
-            "Roam Research" => c.set_workspace(6),
             "calibre" => c.set_workspace(6),
-            "Firefox Developer Edition" => c.set_workspace(2),
+            "Firefox Developer Edition" => {
+                wm.log(&format!("Matched client name: {}", c.wm_name()));
+                wm.log(&format!("Current Workspace: {}", c.workspace()));
+                c.set_workspace(7);
+                wm.log(&format!("Current Workspace: {}", c.workspace()));
+                //wm.client_to_workspace(&Selector::Index(7));
+            }
             _ => println!("something else!")
         }
     }
@@ -116,22 +121,19 @@ fn main() -> Result<()> {
 
         // workspace management
         "M-Tab" => run_internal!(toggle_workspace);
-        "M-A-period" => run_internal!(cycle_workspace, Forward);
-        "M-A-comma" => run_internal!(cycle_workspace, Backward);
-        "M-bracketright" => run_internal!(cycle_screen, Forward);
-        "M-bracketleft" => run_internal!(cycle_screen, Backward);
-        "M-S-bracketright" => run_internal!(drag_workspace, Forward);
-        "M-S-bracketleft" => run_internal!(drag_workspace, Backward);
+        "M-A-period" => run_internal!(cycle_screen, Forward);
+        "M-A-comma" => run_internal!(cycle_screen, Backward);
+        "M-S-period" => run_internal!(drag_workspace, Forward);
+        "M-S-comma" => run_internal!(drag_workspace, Backward);
 
         // Layout & window management
-        "M-grave" => run_internal!(cycle_layout, Forward);
-        "M-S-grave" => run_internal!(cycle_layout, Backward);
+        "M-t" => run_internal!(cycle_layout, Forward);
+        "M-S-t" => run_internal!(cycle_layout, Backward);
         "M-A-Up" => run_internal!(update_max_main, More);
         "M-A-Down" => run_internal!(update_max_main, Less);
         "M-A-Right" => run_internal!(update_main_ratio, More);
         "M-A-Left" => run_internal!(update_main_ratio, Less);
         "M-A-C-Escape" => run_internal!(exit);
-        //"M-A-Escape" => power_menu;
 
         refmap [ config.ws_range() ] in {
             "M-{}" => focus_workspace [ index_selectors(config.workspaces.len()) ];
