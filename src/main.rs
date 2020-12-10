@@ -9,7 +9,12 @@ use penrose::{
     bindings::MouseEvent,
     contrib::{
         extensions::Scratchpad,
-        hooks::{DefaultWorkspace, LayoutSymbolAsRootName},
+        hooks::{
+            DefaultWorkspace,
+            SpawnRule,
+            ClientSpawnRules,
+            LayoutSymbolAsRootName
+        },
     },
     draw::{dwm_bar, TextStyle, XCBDraw},
     helpers::{index_selectors, spawn, spawn_for_output},
@@ -26,40 +31,19 @@ const GREY: u32 = 0x3c3836ff;
 const WHITE: u32 = 0xebdbb2ff;
 const BLUE: u32 = 0x458588ff;
 
-struct MyClientHook {}
-impl Hook for MyClientHook {
-    fn new_client(&mut self, wm: &mut WindowManager, c: &mut Client) {
-        wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()));
-        wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()));
-        match c.wm_name().as_ref() {
-            "calibre" => c.set_workspace(6),
-            "Firefox Developer Edition" => {
-                wm.log(&format!("Matched client name: {}", c.wm_name()));
-                wm.log(&format!("Current Workspace: {}", c.workspace()));
-                c.set_workspace(7);
-                wm.log(&format!("Current Workspace: {}", c.workspace()));
-                //wm.client_to_workspace(&Selector::Index(7));
-            }
-            _ => println!("something else!")
-        }
-    }
-}
-
 fn main() -> Result<()> {
-    // -- logging --
+   // -- logging --
     SimpleLogger::init(LevelFilter::Info, simplelog::Config::default())?;
     let mut config = Config::default();
 
     // -- top level config constants --
-    config.workspaces = vec!["1", "2", "3", "4", "5", "6", "7", "8", "messaging"];
+    let workspaces = vec!["1", "2", "3", "4", "5", "6", "7", "8", "messaging"];
+    config.workspaces = workspaces.clone();
     config.floating_classes = &["dmenu", "dunst", "pinentry-gtk-2", "pinentry"];
-
     config.focused_border = BLUE;
     config.unfocused_border = BLACK;
-    // -- hooks --
-    let sp = Scratchpad::new("alacritty", 0.8, 0.8);
-    sp.register(&mut config);
 
+    // -- hooks --
     config.hooks.push(Box::new(dwm_bar(
         Box::new(XCBDraw::new()?),
         HEIGHT,
@@ -74,6 +58,18 @@ fn main() -> Result<()> {
         GREY, // empty_ws
         &config.workspaces,
     )?));
+
+    let client_default_ws = vec![
+        SpawnRule::WMName("Firefox Developer Edition" , 1),
+        SpawnRule::WMName("Discord", 8),
+    ];
+
+    config.hooks.push(ClientSpawnRules::new(client_default_ws));
+    config.hooks.push(DefaultWorkspace::new(
+        workspaces[0],
+        "[mono]",
+        vec!["alacritty"],
+    ));
 
     // -- layouts --
     let follow_focus_conf = LayoutConf {
@@ -97,6 +93,7 @@ fn main() -> Result<()> {
         Layout::floating("[----]"),
     ];
 
+    // -- key-bindings --bindings
     let key_bindings = gen_keybindings! {
         // Program launch
         "M-p" => run_external!("dmenu_run");
@@ -107,7 +104,6 @@ fn main() -> Result<()> {
 
         // actions
         "M-A-d" => run_internal!(detect_screens);
-        "M-slash" => sp.toggle();
 
         // client management
         "M-j" => run_internal!(cycle_client, Forward);
@@ -146,17 +142,9 @@ fn main() -> Result<()> {
         Press Left + [Meta] => |wm: &mut WindowManager, _: &MouseEvent| wm.cycle_workspace(Backward)
     };
 
-    config.hooks.push(Box::new(MyClientHook {}));
-    config.hooks.push(DefaultWorkspace::new(
-        "1",
-        "[mono]",
-        vec!["alacritty"],
-    ));
-
     // -- init & run --
     let conn = XcbConnection::new()?;
     let mut wm = WindowManager::init(config, &conn);
     wm.grab_keys_and_run(key_bindings, mouse_bindings);
-
     Ok(())
 }
