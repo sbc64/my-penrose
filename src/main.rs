@@ -7,22 +7,15 @@ use penrose::{
     client::Client,
     hooks::Hook,
     bindings::MouseEvent,
-    contrib::{
-        extensions::Scratchpad,
-        hooks::{
-            DefaultWorkspace,
-            SpawnRule,
-            ClientSpawnRules,
-            LayoutSymbolAsRootName
-        },
-    },
+    contrib::hooks::{DefaultWorkspace,SpawnRule,ClientSpawnRules},
     draw::{dwm_bar, TextStyle, XCBDraw},
-    helpers::{index_selectors, spawn, spawn_for_output},
+    helpers::index_selectors,
     layout::{bottom_stack, monocle, side_stack, Layout, LayoutConf},
     Backward, Config, Forward, Less, More, Result, Selector, WindowManager, XcbConnection,
 };
 use simplelog::{LevelFilter, SimpleLogger};
-//use std::env; // used for getting the HOME env var
+use std::{sync, thread, time};
+use std::time::{Duration, Instant};
 
 const HEIGHT: usize = 20;
 const FONT: &str = "hack";
@@ -30,6 +23,69 @@ const BLACK: u32 = 0x282828ff;
 const GREY: u32 = 0x3c3836ff;
 const WHITE: u32 = 0xebdbb2ff;
 const BLUE: u32 = 0x458588ff;
+
+struct Pomo {
+    active: u64,
+    inactive: u64,
+}
+
+struct PomodoroBlackList {
+    active: bool,
+    last_time: Instant,
+    time: Pomo,
+    kill_list: Vec<&'static str>,
+}
+
+impl PomodoroBlackList {
+    fn new(kill_list: Vec<&'static str>) -> Box<Self> {
+        let active: u64 = 1200;
+        let inactive: u64 = 300;
+        Box::new(Self {
+            active: true,
+            time: Pomo {
+                active,
+                inactive,
+            },
+            last_time: Instant::now(),
+            kill_list
+        })
+    }
+}
+
+impl Hook for PomodoroBlackList {
+    fn new_client(&mut self, wm: &mut WindowManager, c: &mut Client) {
+        let current = time::Instant::now();
+
+        let elapsed = current.checked_duration_since(self.last_time)
+                .unwrap()
+                .as_secs();
+
+        wm.log(&format!(
+            "Elapsed: {}", elapsed
+        ));
+        wm.log(&format!(
+            "Active: {}", self.active
+        ));
+
+        if self.active && elapsed > self.time.active {
+            self.active = false;
+            self.last_time = current;
+        } else if !self.active && elapsed > self.time.inactive {
+            self.active = true;
+            self.last_time = current;
+        }
+
+        wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()));
+        wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()));
+
+        let class_and_name = vec![c.wm_class().as_ref(), c.wm_name().as_ref()];
+        if self.active &&
+            self.kill_list.iter().any(|e| class_and_name.contains(e))
+        {
+            wm.kill_client_id(c.id())
+        }
+    }
+}
 
 fn main() -> Result<()> {
    // -- logging --
@@ -62,8 +118,17 @@ fn main() -> Result<()> {
     let client_default_ws = vec![
         SpawnRule::WMName("Firefox Developer Edition" , 1),
         SpawnRule::WMName("Discord", 8),
+        SpawnRule::WMName("Signal", 8),
+        SpawnRule::WMName("Roam Research", 5),
     ];
 
+
+    config.hooks.push(PomodoroBlackList::new(vec![
+        "brave-browser",
+        "Signal",
+        "Discord",
+        "chromium-browser",
+    ]));
     config.hooks.push(ClientSpawnRules::new(client_default_ws));
     config.hooks.push(DefaultWorkspace::new(
         workspaces[0],
