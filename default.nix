@@ -4,7 +4,7 @@ let
 in
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "penrose";
-  version = "0.0.1";
+  version = "0.0.2";
   src = ./.;
   cargoSha256 = "xXwAK/ZwgPgjKIuYvXa5pUVqUsTv186IlkK7SSYNd3c=";
   nativeBuildInputs = with pkgs; [
