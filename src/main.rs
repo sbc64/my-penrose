@@ -5,16 +5,14 @@ extern crate penrose;
 
 use penrose::{
     contrib::{
-        extensions::Scratchpad,
         hooks::{
             DefaultWorkspace,
-            LayoutSymbolAsRootName,
             SpawnRule,
             ClientSpawnRules,
         },
         layouts::paper,
     },
-    draw::{dwm_bar, TextStyle},
+    draw::{TextStyle},
     core::{
         client::Client,
         config::Config,
@@ -80,10 +78,10 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
 
         wm.log(&format!(
             "Elapsed: {}", elapsed
-        ));
+        ))?;
         wm.log(&format!(
             "Active: {}", self.active
-        ));
+        ))?;
 
         if self.active && elapsed > self.time.active {
             self.active = false;
@@ -93,14 +91,14 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
             self.last_time = current;
         }
 
-        wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()));
-        wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()));
+        wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()))?;
+        wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()))?;
 
         let class_and_name = vec![c.wm_class().as_ref(), c.wm_name().as_ref()];
         if self.active &&
             self.kill_list.iter().any(|e| class_and_name.contains(e))
         {
-            wm.kill_client_id(c.id())?
+            //wm.kill_client_id(c.id())?
         }
         Ok(())
     }
@@ -108,15 +106,15 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
 
 fn main() -> Result<()> {
    // -- logging --
-    SimpleLogger::init(LevelFilter::Info, simplelog::Config::default())
+    SimpleLogger::init(LevelFilter::Debug, simplelog::Config::default())
         .expect("Failed to init logging");
 
     // -- top level config constants --
-    let workspaces = vec!["1", "2", "3", "4", "5", "6", "7", "8", "messaging"];
+    let ws = vec!["1", "2", "3", "4", "5", "6", "7", "8", "9"];
     let mut config_builder = Config::default().builder();
     config_builder
-        .workspaces(workspaces.clone())
-        .floating_classes(vec!["dmenu", "dunst", "pinentry-gtk-2", "pinentry"])
+        .workspaces(ws.clone())
+        .floating_classes(vec!["dmenu", "dunst", "pinentry-gtk-2", "pinentry", "polybar"])
         .focused_border("#cc241d")?
         .unfocused_border("#3c3836")?;
 
@@ -140,32 +138,12 @@ fn main() -> Result<()> {
         SpawnRule::WMName("Roam Research", 5),
     ]));
     hooks.push(DefaultWorkspace::new(
-        workspaces[0],
+        ws[0],
         "[mono]",
         vec!["alacritty"],
     ));
 
     // -- layouts --
-    let mut bar = dwm_bar(
-        XcbDraw::new()?,
-        HEIGHT,
-        &TextStyle {
-            font: FONT.to_string(),
-            point_size: 11,
-            fg: WHITE.into(),
-            bg: Some(BLACK.into()),
-            padding: (2.0, 2.0),
-        },
-        BLUE, // highlight
-        GREY, // empty_ws
-        workspaces,
-    )?;
-
-    let config = config_builder
-        .workspaces(vec!["main"])
-        .build()
-        .unwrap();
-
     let follow_focus_conf = LayoutConf {
         floating: false,
         gapless: true,
@@ -238,8 +216,8 @@ fn main() -> Result<()> {
     };
 
     // -- init & run --
+    let config = config_builder.build().unwrap();
     let mut wm = new_xcb_backed_window_manager(config, hooks, logging_error_handler())?;
-    bar.startup(&mut wm);
     wm.grab_keys_and_run(key_bindings, mouse_bindings)?;
     Ok(())
 }
