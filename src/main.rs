@@ -12,7 +12,7 @@ use penrose::{
         },
         layouts::paper,
     },
-    draw::{TextStyle},
+    draw::{dwm_bar, Color, TextStyle},
     core::{
         client::Client,
         config::Config,
@@ -35,10 +35,7 @@ use std::time::{Duration, Instant};
 
 const HEIGHT: usize = 20;
 const FONT: &str = "hack";
-const BLACK: u32 = 0x282828ff;
-const GREY: u32 = 0x3c3836ff;
-const WHITE: u32 = 0xebdbb2ff;
-const BLUE: u32 = 0x458588ff;
+
 
 struct Pomo {
     active: u64,
@@ -114,7 +111,7 @@ fn main() -> Result<()> {
     let mut config_builder = Config::default().builder();
     config_builder
         .workspaces(ws.clone())
-        .floating_classes(vec!["dmenu", "dunst", "pinentry-gtk-2", "pinentry", "polybar"])
+        .floating_classes(vec!["dmenu", "dunst", "pinentry-gtk-2", "pinentry", "polybar", "rofi"])
         .focused_border("#cc241d")?
         .unfocused_border("#3c3836")?;
 
@@ -142,6 +139,26 @@ fn main() -> Result<()> {
         "[mono]",
         vec!["alacritty"],
     ));
+
+    let black: Color = Color::from(0x282828ff);
+    let grey: Color = Color::new_from_hex(0x3c3836ff);
+    let blue: Color = Color::new_from_hex(0x458588ff);
+    let white: Color = Color::new_from_hex(0xebdbb2ff);
+
+    hooks.push(Box::new(dwm_bar(
+            XcbDraw::new()?,
+            HEIGHT,
+            &TextStyle {
+                font: FONT.to_string(),
+                point_size: 11,
+                fg: white,
+                bg: Some(black),
+                padding: (2.0, 2.0),
+            },
+            blue, // highlight
+            grey, // empty_ws
+            ws.clone(),
+    )?));
 
     // -- layouts --
     let follow_focus_conf = LayoutConf {
@@ -218,6 +235,5 @@ fn main() -> Result<()> {
     // -- init & run --
     let config = config_builder.build().unwrap();
     let mut wm = new_xcb_backed_window_manager(config, hooks, logging_error_handler())?;
-    wm.grab_keys_and_run(key_bindings, mouse_bindings)?;
-    Ok(())
+    wm.grab_keys_and_run(key_bindings, mouse_bindings)
 }

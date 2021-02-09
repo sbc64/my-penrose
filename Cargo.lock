@@ -342,6 +342,7 @@ dependencies = [
  "nix",
  "pango",
  "pangocairo",
+ "penrose_keysyms",
  "penrose_proc",
  "strum 0.19.5",
  "strum_macros 0.19.4",
