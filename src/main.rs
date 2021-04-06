@@ -5,37 +5,32 @@ extern crate penrose;
 
 use penrose::{
     contrib::{
-        hooks::{
-            DefaultWorkspace,
-            SpawnRule,
-            ClientSpawnRules,
-        },
+        hooks::{ClientSpawnRules, DefaultWorkspace, SpawnRule},
         layouts::paper,
     },
-    draw::{dwm_bar, Color, TextStyle},
     core::{
+        bindings::MouseEvent,
         client::Client,
         config::Config,
         helpers::index_selectors,
         hooks::Hook,
-        layout::{bottom_stack, side_stack, Layout, LayoutConf, monocle},
+        layout::{bottom_stack, monocle, side_stack, Layout, LayoutConf},
         manager::WindowManager,
         ring::Selector,
         xconnection::XConn,
-        bindings::MouseEvent,
     },
+    draw::{dwm_bar, Color, TextStyle},
     logging_error_handler,
-    xcb::{new_xcb_backed_window_manager, XcbDraw, XcbConnection, XcbHooks},
+    xcb::{new_xcb_backed_window_manager, XcbConnection, XcbDraw, XcbHooks},
     Backward, Forward, Less, More, Result,
 };
 
 use simplelog::{LevelFilter, SimpleLogger};
-use std::{sync, thread, time};
 use std::time::{Duration, Instant};
+use std::{sync, thread, time};
 
-const HEIGHT: usize = 20;
+const HEIGHT: usize = 16;
 const FONT: &str = "hack";
-
 
 struct Pomo {
     active: u64,
@@ -55,12 +50,9 @@ impl PomodoroBlackList {
         let inactive: u64 = 300;
         Box::new(Self {
             active: true,
-            time: Pomo {
-                active,
-                inactive,
-            },
+            time: Pomo { active, inactive },
             last_time: Instant::now(),
-            kill_list
+            kill_list,
         })
     }
 }
@@ -69,16 +61,13 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
     fn new_client(&mut self, wm: &mut WindowManager<X>, c: &mut Client) -> Result<()> {
         let current = time::Instant::now();
 
-        let elapsed = current.checked_duration_since(self.last_time)
-                .unwrap()
-                .as_secs();
+        let elapsed = current
+            .checked_duration_since(self.last_time)
+            .unwrap()
+            .as_secs();
 
-        wm.log(&format!(
-            "Elapsed: {}", elapsed
-        ))?;
-        wm.log(&format!(
-            "Active: {}", self.active
-        ))?;
+        wm.log(&format!("Elapsed: {}", elapsed))?;
+        wm.log(&format!("Active: {}", self.active))?;
 
         if self.active && elapsed > self.time.active {
             self.active = false;
@@ -92,18 +81,21 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
         wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()))?;
 
         let class_and_name = vec![c.wm_class().as_ref(), c.wm_name().as_ref()];
-        if self.active &&
-            self.kill_list.iter().any(|e| class_and_name.contains(e))
-        {
-            //wm.kill_client_id(c.id())?
+        if self.active && self.kill_list.iter().any(|e| class_and_name.contains(e)) {
+            //
         }
         Ok(())
     }
 }
 
 fn main() -> Result<()> {
-   // -- logging --
-    SimpleLogger::init(LevelFilter::Debug, simplelog::Config::default())
+    let black = Color::from(0x282828ff);
+    let grey = Color::new_from_hex(0x3c3836ff);
+    let blue = Color::new_from_hex(0x458588ff);
+    let white = Color::new_from_hex(0xebdbb2ff);
+
+    // -- logging --
+    SimpleLogger::init(LevelFilter::Info, simplelog::Config::default())
         .expect("Failed to init logging");
 
     // -- top level config constants --
@@ -111,9 +103,18 @@ fn main() -> Result<()> {
     let mut config_builder = Config::default().builder();
     config_builder
         .workspaces(ws.clone())
-        .floating_classes(vec!["dmenu", "dunst", "pinentry-gtk-2", "pinentry", "polybar", "rofi"])
-        .focused_border("#cc241d")?
-        .unfocused_border("#3c3836")?;
+        .border_px(0)
+        .bar_height(HEIGHT as u32)
+        .floating_classes(vec![
+            "dmenu",
+            "dunst",
+            "pinentry-gtk-2",
+            "pinentry",
+            "polybar",
+            "rofi",
+        ])
+        .focused_border(blue.as_rgb_hex_string())?
+        .unfocused_border(grey.as_rgb_hex_string())?;
 
     // -- hooks --
     let mut hooks: XcbHooks = vec![];
@@ -128,36 +129,27 @@ fn main() -> Result<()> {
         "chromium-browser",
     ]));
     hooks.push(ClientSpawnRules::new(vec![
-        SpawnRule::WMName("Firefox Developer Edition" , 1),
+        SpawnRule::WMName("Firefox Developer Edition", 1),
         SpawnRule::WMName("Discord", 8),
         SpawnRule::WMName("Signal", 8),
         SpawnRule::WMName("Element", 8),
         SpawnRule::WMName("Roam Research", 5),
     ]));
-    hooks.push(DefaultWorkspace::new(
-        ws[0],
-        "[mono]",
-        vec!["alacritty"],
-    ));
-
-    let black: Color = Color::from(0x282828ff);
-    let grey: Color = Color::new_from_hex(0x3c3836ff);
-    let blue: Color = Color::new_from_hex(0x458588ff);
-    let white: Color = Color::new_from_hex(0xebdbb2ff);
+    hooks.push(DefaultWorkspace::new(ws[0], "[mono]", vec!["alacritty"]));
 
     hooks.push(Box::new(dwm_bar(
-            XcbDraw::new()?,
-            HEIGHT,
-            &TextStyle {
-                font: FONT.to_string(),
-                point_size: 11,
-                fg: white,
-                bg: Some(black),
-                padding: (2.0, 2.0),
-            },
-            blue, // highlight
-            grey, // empty_ws
-            ws.clone(),
+        XcbDraw::new()?,
+        HEIGHT,
+        &TextStyle {
+            font: FONT.to_string(),
+            point_size: 10,
+            fg: white,
+            bg: Some(black),
+            padding: (2.0, 2.0),
+        },
+        blue, // highlight
+        grey, // empty_ws
+        ws.clone(),
     )?));
 
     // -- layouts --
@@ -225,7 +217,6 @@ fn main() -> Result<()> {
             "M-S-{}" => client_to_workspace (REF);
         };
     };
-
 
     let mouse_bindings = gen_mousebindings! {
         Press Right + [Meta] => |wm: &mut WindowManager<_>, _: &MouseEvent| wm.cycle_workspace(Forward),
