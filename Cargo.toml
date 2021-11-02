@@ -11,3 +11,4 @@ penrose = { git = "https://github.com/sbc64/penrose", branch = "develop", featur
 #penrose = { path = "../penrose", features = [ "xcb", "xcb_draw", "keysyms" ]}
 tracing = "0.1"
 simplelog = "0.8.0"
+foo_config =  { package = "config", version = "0.10" }

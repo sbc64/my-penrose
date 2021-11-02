@@ -2,9 +2,13 @@
 
 #[macro_use]
 extern crate penrose;
-
 #[macro_use]
 extern crate tracing;
+
+extern crate foo_config;
+
+use std::collections::HashMap;
+use std::env;
 
 use penrose::{
     contrib::hooks::{ClientSpawnRules, DefaultWorkspace, SpawnRule},
@@ -24,33 +28,34 @@ use penrose::{
     Backward, Forward, Less, More, Result,
 };
 
+use foo_config::Value;
 use simplelog::{LevelFilter, SimpleLogger};
+use std::fs;
+use std::path::Path;
+use std::time;
 use std::time::{Duration, Instant};
-use std::{sync, thread, time};
 
 const HEIGHT: usize = 16;
 const FONT: &str = "hack";
 
-struct Pomo {
-    active: u64,
-    inactive: u64,
+struct ConfigTable {
+    sound: String,
+    duration: Duration,
 }
 
 struct PomodoroBlackList {
     active: bool,
-    last_time: Instant,
-    time: Pomo,
+    duration: Duration,
+    start_time: Instant,
     kill_list: Vec<&'static str>,
 }
 
 impl PomodoroBlackList {
-    fn new(kill_list: Vec<&'static str>) -> Box<Self> {
-        let active: u64 = 1200;
-        let inactive: u64 = 300;
+    fn new(kill_list: Vec<&'static str>, duration: Duration) -> Box<Self> {
         Box::new(Self {
-            active: true,
-            time: Pomo { active, inactive },
-            last_time: Instant::now(),
+            active: false,
+            duration,
+            start_time: Instant::now(),
             kill_list,
         })
     }
@@ -58,34 +63,75 @@ impl PomodoroBlackList {
 
 impl<X: XConn> Hook<X> for PomodoroBlackList {
     fn new_client(&mut self, wm: &mut WindowManager<X>, c: Xid) -> Result<()> {
-        let current = time::Instant::now();
-
-        let elapsed = current
-            .checked_duration_since(self.last_time)
-            .unwrap()
-            .as_secs();
         let client = wm.client(&Selector::WinId(c)).unwrap();
 
-        if self.active && elapsed > self.time.active {
-            self.active = false;
-            self.last_time = current;
-        } else if !self.active && elapsed > self.time.inactive {
+        let mut path: String = env::var("XDG_CONFIG_HOME").unwrap();
+        path.push_str("/romodoro.lock");
+        let exists = Path::new(&path).exists();
+        if exists {
+            if !self.active {
+                self.start_time = time::Instant::now();
+            }
             self.active = true;
-            self.last_time = current;
         }
 
+        if self.active && self.start_time.elapsed().as_secs() > self.duration.as_secs() {
+            self.active = false;
+            fs::remove_file(path)?;
+        }
+
+        info!(
+            "Path Exists: '{}' Active: '{}' Elapsed: '{:?}', Left: '{:?}'",
+            exists,
+            self.active,
+            self.start_time.elapsed(),
+            self.duration.as_secs() - self.start_time.elapsed().as_secs()
+        );
         info!("new client with WM_CLASS='{}'", client.wm_class());
         info!("new client with WM_NAME='{}'", client.wm_name());
 
         let class_and_name = vec![client.wm_class(), client.wm_name()];
         if self.active && self.kill_list.iter().any(|e| class_and_name.contains(e)) {
+            info!("KILLING '{}'", client.wm_name());
             wm.kill_client_id(c)?;
         }
         Ok(())
     }
 }
 
+fn extract_table(table: HashMap<String, Value>) -> ConfigTable {
+    let sound: String;
+    match table.get("sound") {
+        Some(entry) => sound = entry.to_string(),
+        None => sound = "".to_string(),
+    }
+
+    let duration: u64;
+    match table.get("duration") {
+        Some(entry) => duration = entry.to_string().parse::<u64>().expect("Not a number"),
+        None => duration = 0,
+    }
+    return ConfigTable {
+        sound,
+        duration: Duration::from_secs(duration),
+    };
+}
+
 fn main() -> Result<()> {
+    let mut config_path: String = env::var("XDG_CONFIG_HOME").unwrap();
+    config_path.push_str("/romodoro");
+    let mut settings = foo_config::Config::default();
+    settings
+        .merge(foo_config::File::with_name(config_path.as_ref()))
+        .unwrap()
+        .merge(foo_config::Environment::with_prefix("ROMODORO"))
+        .unwrap();
+
+    let begin_work = settings
+        .get_table("begin_work")
+        .expect("no begin_work table");
+    let begin_work = extract_table(begin_work);
+
     let black = Color::from(0x282828ff);
     let grey = Color::new_from_hex(0x3c3836ff);
     let blue = Color::new_from_hex(0x458588ff);
@@ -115,16 +161,19 @@ fn main() -> Result<()> {
 
     // -- hooks --
     let hooks: XcbHooks = vec![
-        PomodoroBlackList::new(vec![
-            "brave-browser",
-            "telegram-desktop",
-            "Telegram",
-            "Signal",
-            "signal",
-            "Discord",
-            "discord",
-            "chromium-browser",
-        ]),
+        PomodoroBlackList::new(
+            vec![
+                "brave-browser",
+                "telegram-desktop",
+                "Telegram",
+                "Signal",
+                "signal",
+                "Discord",
+                "discord",
+                "chromium-browser",
+            ],
+            begin_work.duration,
+        ),
         ClientSpawnRules::new(vec![
             SpawnRule::WMName("Firefox Developer Edition", 1),
             SpawnRule::WMName("Discord", 8),
@@ -190,7 +239,7 @@ fn main() -> Result<()> {
         "M-S-k" => run_internal!(drag_client, Backward);
         "M-C-bracketleft" => run_internal!(client_to_screen, &Selector::Index(0));
         "M-C-bracketright" => run_internal!(client_to_screen, &Selector::Index(1));
-        "M-S-f" => run_internal!(toggle_client_fullscreen, &Selector::Focused);
+        "M-b" => run_internal!(toggle_client_fullscreen, &Selector::Focused);
         "M-S-c" => run_internal!(kill_client);
 
         // workspace management
