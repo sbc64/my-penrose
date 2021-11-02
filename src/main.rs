@@ -3,25 +3,24 @@
 #[macro_use]
 extern crate penrose;
 
+#[macro_use]
+extern crate tracing;
+
 use penrose::{
-    contrib::{
-        hooks::{ClientSpawnRules, DefaultWorkspace, SpawnRule},
-        layouts::paper,
-    },
+    contrib::hooks::{ClientSpawnRules, DefaultWorkspace, SpawnRule},
     core::{
         bindings::MouseEvent,
-        client::Client,
         config::Config,
         helpers::index_selectors,
         hooks::Hook,
         layout::{bottom_stack, monocle, side_stack, Layout, LayoutConf},
         manager::WindowManager,
         ring::Selector,
-        xconnection::XConn,
+        xconnection::{XConn, Xid},
     },
     draw::{dwm_bar, Color, TextStyle},
     logging_error_handler,
-    xcb::{new_xcb_backed_window_manager, XcbConnection, XcbDraw, XcbHooks},
+    xcb::{new_xcb_backed_window_manager, XcbDraw, XcbHooks},
     Backward, Forward, Less, More, Result,
 };
 
@@ -58,16 +57,14 @@ impl PomodoroBlackList {
 }
 
 impl<X: XConn> Hook<X> for PomodoroBlackList {
-    fn new_client(&mut self, wm: &mut WindowManager<X>, c: &mut Client) -> Result<()> {
+    fn new_client(&mut self, wm: &mut WindowManager<X>, c: Xid) -> Result<()> {
         let current = time::Instant::now();
 
         let elapsed = current
             .checked_duration_since(self.last_time)
             .unwrap()
             .as_secs();
-
-        wm.log(&format!("Elapsed: {}", elapsed))?;
-        wm.log(&format!("Active: {}", self.active))?;
+        let client = wm.client(&Selector::WinId(c)).unwrap();
 
         if self.active && elapsed > self.time.active {
             self.active = false;
@@ -77,12 +74,12 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
             self.last_time = current;
         }
 
-        wm.log(&format!("new client with WM_CLASS='{}'", c.wm_class()))?;
-        wm.log(&format!("new client with WM_NAME='{}'", c.wm_name()))?;
+        info!("new client with WM_CLASS='{}'", client.wm_class());
+        info!("new client with WM_NAME='{}'", client.wm_name());
 
-        let class_and_name = vec![c.wm_class().as_ref(), c.wm_name().as_ref()];
+        let class_and_name = vec![client.wm_class(), client.wm_name()];
         if self.active && self.kill_list.iter().any(|e| class_and_name.contains(e)) {
-            //
+            wm.kill_client_id(c)?;
         }
         Ok(())
     }
@@ -117,40 +114,40 @@ fn main() -> Result<()> {
         .unfocused_border(grey.as_rgb_hex_string())?;
 
     // -- hooks --
-    let mut hooks: XcbHooks = vec![];
-    hooks.push(PomodoroBlackList::new(vec![
-        "brave-browser",
-        "telegram-desktop",
-        "Telegram",
-        "Signal",
-        "signal",
-        "Discord",
-        "discord",
-        "chromium-browser",
-    ]));
-    hooks.push(ClientSpawnRules::new(vec![
-        SpawnRule::WMName("Firefox Developer Edition", 1),
-        SpawnRule::WMName("Discord", 8),
-        SpawnRule::WMName("Signal", 8),
-        SpawnRule::WMName("Element", 8),
-        SpawnRule::WMName("Roam Research", 5),
-    ]));
-    hooks.push(DefaultWorkspace::new(ws[0], "[mono]", vec!["alacritty"]));
-
-    hooks.push(Box::new(dwm_bar(
-        XcbDraw::new()?,
-        HEIGHT,
-        &TextStyle {
-            font: FONT.to_string(),
-            point_size: 10,
-            fg: white,
-            bg: Some(black),
-            padding: (2.0, 2.0),
-        },
-        blue, // highlight
-        grey, // empty_ws
-        ws.clone(),
-    )?));
+    let hooks: XcbHooks = vec![
+        PomodoroBlackList::new(vec![
+            "brave-browser",
+            "telegram-desktop",
+            "Telegram",
+            "Signal",
+            "signal",
+            "Discord",
+            "discord",
+            "chromium-browser",
+        ]),
+        ClientSpawnRules::new(vec![
+            SpawnRule::WMName("Firefox Developer Edition", 1),
+            SpawnRule::WMName("Discord", 8),
+            SpawnRule::WMName("Signal", 8),
+            SpawnRule::WMName("Element", 8),
+            SpawnRule::WMName("Roam Research", 5),
+        ]),
+        DefaultWorkspace::new(ws[0], "[mono]", vec!["alacritty"]),
+        Box::new(dwm_bar(
+            XcbDraw::new()?,
+            HEIGHT,
+            &TextStyle {
+                font: FONT.to_string(),
+                point_size: 10,
+                fg: white,
+                bg: Some(black),
+                padding: (2.0, 2.0),
+            },
+            blue, // highlight
+            grey, // empty_ws
+            ws.clone(),
+        )?),
+    ];
 
     // -- layouts --
     let follow_focus_conf = LayoutConf {
@@ -198,8 +195,8 @@ fn main() -> Result<()> {
 
         // workspace management
         "M-Tab" => run_internal!(toggle_workspace);
-        "M-A-period" => run_internal!(cycle_screen, Forward);
-        "M-A-comma" => run_internal!(cycle_screen, Backward);
+        "M-period" => run_internal!(cycle_screen, Forward);
+        "M-comma" => run_internal!(cycle_screen, Backward);
         "M-S-period" => run_internal!(drag_workspace, Forward);
         "M-S-comma" => run_internal!(drag_workspace, Backward);
 

@@ -6,7 +6,7 @@ pkgs.rustPlatform.buildRustPackage rec {
   pname = "penrose";
   version = "0.0.2";
   src = ./.;
-  cargoSha256 = "xXwAK/ZwgPgjKIuYvXa5pUVqUsTv186IlkK7SSYNd3c=";
+  cargoSha256 = "03ab5lmbbccs34032fm4ql2394m301dr0k4myyrcmjn8m1093xg2";
   nativeBuildInputs = with pkgs; [
     glib.dev
     cairo.dev
