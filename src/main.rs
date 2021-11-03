@@ -70,6 +70,7 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
         let exists = Path::new(&path).exists();
         if exists {
             if !self.active {
+                self.duration = getDuration().duration;
                 self.start_time = time::Instant::now();
             }
             self.active = true;
@@ -117,7 +118,7 @@ fn extract_table(table: HashMap<String, Value>) -> ConfigTable {
     };
 }
 
-fn main() -> Result<()> {
+fn getDuration() -> ConfigTable {
     let mut config_path: String = env::var("XDG_CONFIG_HOME").unwrap();
     config_path.push_str("/romodoro");
     let mut settings = foo_config::Config::default();
@@ -130,8 +131,10 @@ fn main() -> Result<()> {
     let begin_work = settings
         .get_table("begin_work")
         .expect("no begin_work table");
-    let begin_work = extract_table(begin_work);
+    extract_table(begin_work)
+}
 
+fn main() -> Result<()> {
     let black = Color::from(0x282828ff);
     let grey = Color::new_from_hex(0x3c3836ff);
     let blue = Color::new_from_hex(0x458588ff);
@@ -170,8 +173,10 @@ fn main() -> Result<()> {
                 "signal",
                 "chromium-browser",
                 "New Tab - Brave",
+                "Discord",
+                "discord",
             ],
-            begin_work.duration,
+            getDuration().duration,
         ),
         ClientSpawnRules::new(vec![
             SpawnRule::WMName("Firefox Developer Edition", 1),
