@@ -35,7 +35,7 @@ use std::path::Path;
 use std::time;
 use std::time::{Duration, Instant};
 
-const HEIGHT: usize = 16;
+const HEIGHT: usize = 20;
 const FONT: &str = "hack";
 
 struct ConfigTable {
@@ -142,10 +142,10 @@ fn main() -> Result<()> {
         .expect("Failed to init logging");
 
     // -- top level config constants --
-    let ws = vec!["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    let workspaces = vec!["1", "2", "3", "4", "5"];
     let mut config_builder = Config::default().builder();
     config_builder
-        .workspaces(ws.clone())
+        .workspaces(workspaces.clone())
         .border_px(0)
         .bar_height(HEIGHT as u32)
         .floating_classes(vec![
@@ -175,25 +175,25 @@ fn main() -> Result<()> {
         ),
         ClientSpawnRules::new(vec![
             SpawnRule::WMName("Firefox Developer Edition", 1),
-            SpawnRule::WMName("Discord", 8),
-            SpawnRule::WMName("Signal", 8),
-            SpawnRule::WMName("Element", 8),
-            SpawnRule::WMName("Roam Research", 5),
+            SpawnRule::WMName("Discord", 4),
+            SpawnRule::WMName("Signal", 4),
+            SpawnRule::WMName("Element", 4),
+            SpawnRule::WMName("Roam Research", 3),
         ]),
-        DefaultWorkspace::new(ws[0], "[mono]", vec!["alacritty"]),
+        DefaultWorkspace::new(workspaces[0], "[mono]", vec!["alacritty"]),
         Box::new(dwm_bar(
             XcbDraw::new()?,
             HEIGHT,
             &TextStyle {
                 font: FONT.to_string(),
-                point_size: 10,
+                point_size: 12,
                 fg: white,
                 bg: Some(black),
                 padding: (2.0, 2.0),
             },
             blue, // highlight
             grey, // empty_ws
-            ws.clone(),
+            workspaces.clone(),
         )?),
     ];
 
@@ -216,7 +216,7 @@ fn main() -> Result<()> {
         Layout::new("[side]", tiled_layout, side_stack, n_main, ratio),
         Layout::new("[botm]", LayoutConf::default(), bottom_stack, n_main, ratio),
         Layout::new("[mono]", follow_focus_conf, monocle, n_main, ratio),
-        Layout::floating("[----]"),
+        Layout::floating("[floa]"),
     ]);
 
     // -- key-bindings --bindings
@@ -257,7 +257,7 @@ fn main() -> Result<()> {
         "M-A-Left" => run_internal!(update_main_ratio, Less);
         "M-A-C-Escape" => run_internal!(exit);
 
-        map: { "1", "2", "3", "4", "5", "6", "7", "8", "9" } to index_selectors(9) => {
+        map: { "1", "2", "3", "4", "5"} to index_selectors(5) => {
             "M-{}" => focus_workspace (REF);
             "M-S-{}" => client_to_workspace (REF);
         };
