@@ -12,3 +12,4 @@ penrose = { git = "https://github.com/sbc64/penrose", branch = "develop", featur
 tracing = "0.1"
 simplelog = "0.8.0"
 foo_config =  { package = "config", version = "0.10" }
+notify = "4.0.17"

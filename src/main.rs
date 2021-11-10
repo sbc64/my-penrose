@@ -4,11 +4,7 @@
 extern crate penrose;
 #[macro_use]
 extern crate tracing;
-
 extern crate foo_config;
-
-use std::collections::HashMap;
-use std::env;
 
 use penrose::{
     contrib::hooks::{ClientSpawnRules, DefaultWorkspace, SpawnRule},
@@ -27,13 +23,18 @@ use penrose::{
     xcb::{new_xcb_backed_window_manager, XcbDraw, XcbHooks},
     Backward, Forward, Less, More, Result,
 };
-
-use foo_config::Value;
 use simplelog::{LevelFilter, SimpleLogger};
-use std::fs;
+use std::collections::HashMap;
+use std::env;
 use std::path::Path;
+use std::sync;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time;
 use std::time::{Duration, Instant};
+
+use notify::{RecursiveMode, Watcher};
+use std::sync::mpsc::channel;
 
 const HEIGHT: usize = 20;
 const FONT: &str = "hack";
@@ -45,6 +46,7 @@ struct ConfigTable {
 
 struct PomodoroBlackList {
     active: bool,
+    lock_file: sync::Arc<AtomicBool>,
     duration: Duration,
     start_time: Instant,
     kill_list: Vec<&'static str>,
@@ -52,8 +54,44 @@ struct PomodoroBlackList {
 
 impl PomodoroBlackList {
     fn new(kill_list: Vec<&'static str>, duration: Duration) -> Box<Self> {
+        let mut path = env::var("XDG_CONFIG_HOME").unwrap();
+        path.push_str("/romodoro.lock");
+        let path = path;
+        let path_exists = Path::new(&path).exists();
+        let lock_file = sync::Arc::new(AtomicBool::new(path_exists));
+        let lock_file_clone = lock_file.clone();
+
+        thread::spawn(move || loop {
+            let (tx, rx) = channel();
+            let mut watcher = notify::raw_watcher(tx).unwrap();
+            let dir = Path::new(&path).parent().unwrap();
+            watcher.watch(dir, RecursiveMode::NonRecursive).unwrap();
+            match rx.recv() {
+                Ok(event) => {
+                    if event.path.as_ref().unwrap().ends_with("romodoro.lock") {
+                        match event.op {
+                            Ok(notify::Op::REMOVE) => {
+                                lock_file.store(false, Ordering::Relaxed);
+                                info!("REMOVE EVENT: {:?}", event);
+                            }
+                            Ok(notify::Op::CREATE) => {
+                                lock_file.store(true, Ordering::Relaxed);
+                                info!("CREATE EVENT: {:?}", event);
+                            }
+                            Ok(_) => {
+                                info!("EVENT: {:?}", event);
+                            }
+                            Err(event) => info!("Event error: {:?}", event),
+                        }
+                    }
+                }
+                Err(e) => info!("watch error: {:?}", e),
+            };
+        });
+
         Box::new(Self {
-            active: false,
+            active: path_exists,
+            lock_file: lock_file_clone,
             duration,
             start_time: Instant::now(),
             kill_list,
@@ -63,31 +101,30 @@ impl PomodoroBlackList {
 
 impl<X: XConn> Hook<X> for PomodoroBlackList {
     fn new_client(&mut self, wm: &mut WindowManager<X>, c: Xid) -> Result<()> {
-        let client = wm.client(&Selector::WinId(c)).unwrap();
+        let completed_time = if self.start_time.elapsed().as_secs() > self.duration.as_secs() {
+            true
+        } else {
+            false
+        };
 
-        let mut path: String = env::var("XDG_CONFIG_HOME").unwrap();
-        path.push_str("/romodoro.lock");
-        let exists = Path::new(&path).exists();
-        if exists {
-            if !self.active {
-                self.duration = getDuration().duration;
-                self.start_time = time::Instant::now();
-            }
+        let lock_file_exists = self.lock_file.load(Ordering::Relaxed);
+        if !self.active && lock_file_exists {
+            self.duration = get_duration().duration;
+            self.start_time = time::Instant::now();
             self.active = true;
-        }
-
-        if self.active && self.start_time.elapsed().as_secs() > self.duration.as_secs() {
+        } else if self.active && completed_time {
             self.active = false;
-            fs::remove_file(path)?;
         }
 
         info!(
-            "Path Exists: '{}' Active: '{}' Elapsed: '{:?}', Left: '{:?}'",
-            exists,
+            "Active: '{}', Path: '{}', Elapsed: '{:?}', Left: '{:?}'",
             self.active,
+            lock_file_exists,
             self.start_time.elapsed(),
             self.duration.as_secs() - self.start_time.elapsed().as_secs()
         );
+
+        let client = wm.client(&Selector::WinId(c)).unwrap();
         info!("new client with WM_CLASS='{}'", client.wm_class());
         info!("new client with WM_NAME='{}'", client.wm_name());
 
@@ -100,7 +137,7 @@ impl<X: XConn> Hook<X> for PomodoroBlackList {
     }
 }
 
-fn extract_table(table: HashMap<String, Value>) -> ConfigTable {
+fn extract_table(table: HashMap<String, foo_config::Value>) -> ConfigTable {
     let sound: String;
     match table.get("sound") {
         Some(entry) => sound = entry.to_string(),
@@ -118,7 +155,7 @@ fn extract_table(table: HashMap<String, Value>) -> ConfigTable {
     };
 }
 
-fn getDuration() -> ConfigTable {
+fn get_duration() -> ConfigTable {
     let mut config_path: String = env::var("XDG_CONFIG_HOME").unwrap();
     config_path.push_str("/romodoro");
     let mut settings = foo_config::Config::default();
@@ -175,8 +212,10 @@ fn main() -> Result<()> {
                 "New Tab - Brave",
                 "Discord",
                 "discord",
+                "element",
+                "Element",
             ],
-            getDuration().duration,
+            get_duration().duration,
         ),
         ClientSpawnRules::new(vec![
             SpawnRule::WMName("Firefox Developer Edition", 1),
