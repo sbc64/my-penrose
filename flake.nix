@@ -69,7 +69,7 @@
     naersk.url = "github:nmattia/naersk/master";
     naersk.inputs.nixpkgs.follows = "nixpkgs";
     flake-compat = {
-      url = github:edolstra/flake-compat;
+      url = "github:edolstra/flake-compat";
       flake = false;
     };
   };
@@ -79,17 +79,22 @@
     nixpkgs,
     naersk,
     utils,
+    flake-compat,
   }: utils.lib.eachDefaultSystem (system: 
   let
-    pkgs = import nixpkgs { inherit system; };
-    naersk-lib = pkgs.callPackage naersk {};
+    pkgs = nixpkgs.legacyPackages."${system}";
+    naersk-lib = naersk.lib."${system}";
   in {
     defaultPackage = naersk-lib.buildPackage {
-        src = ./.;
+        pname = "my-penrose";
+        root = ./.;
         buildInputs = with pkgs; [pkg-config openssl];
-      };
-    devShell.x86_64-linux = pkgs.mkShell {
+    };
+    devShell = pkgs.mkShell {
       buildInputs = with pkgs; [
+        cargo
+        rustc
+        clippy
         glib.dev
         cairo.dev
         pango.dev

@@ -55,9 +55,6 @@ struct PomodoroBlackList {
 impl PomodoroBlackList {
     fn new(kill_list: Vec<&'static str>, duration: Duration) -> Box<Self> {
         let mut path = env::var("XDG_CONFIG_HOME").unwrap();
-        path.into_raw_parts();
-        let path = path;
-        path.trim_matches(pat);
         let path_exists = Path::new(&path).exists();
         let lock_file = sync::Arc::new(AtomicBool::new(path_exists));
         let lock_file_clone = lock_file.clone();
